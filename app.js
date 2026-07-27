@@ -11,7 +11,11 @@ import chatRouter from "./routes/chatRoute.js";
 env.config();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL,
+  credentials: true,
+}));
+
 app.use(express.json());
 
 console.log("🔥 NEW CODE RUNNING")

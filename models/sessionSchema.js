@@ -26,4 +26,5 @@ const sessionSchema = new mongoose.Schema({
   timestamps: { createdAt: "created_at", updatedAt: false }
 });
 
-export default mongoose.model("Session", sessionSchema);
+export default mongoose.models.ChatSession ||
+  mongoose.model("ChatSession", sessionSchema, "chat_sessions");
