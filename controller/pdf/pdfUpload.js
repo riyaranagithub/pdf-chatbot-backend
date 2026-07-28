@@ -2,7 +2,7 @@ import { Router } from "express";
 import Pdf from "../../models/pdfSchema.js";
 import fs from "fs";
 import path from "path";
-import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { chromaStore } from "../../utils/cromaStore.js";
@@ -65,26 +65,40 @@ export const pdfUpload = async (req, res) => {
       return res.status(500).json({ error: "Upload failed: No URL returned" });
     }
 
+
+
     // 📖 Load PDF
-    const loader = new PDFLoader(filePath);
-    const docs = await loader.load();
 
-    console.log("📚 Docs loaded:", docs.length);
-    console.log("📄 First doc content preview:", docs[0]);
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(req.file.buffer),
+    });
 
-    if (!docs.length) {
-      throw new Error("❌ PDF not loaded properly");
+    const pdf = await loadingTask.promise;
+
+    let text = "";
+
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+
+      text += textContent.items
+        .map(item => ("str" in item ? item.str : ""))
+        .join(" ");
+
+      text += "\n";
     }
-
-    // ✂️ Split text
     const splitter = new RecursiveCharacterTextSplitter({
       chunkSize: 800,
       chunkOverlap: 150,
     });
 
-    const splitDocs = await splitter.splitDocuments(docs);
-    console.log("✂️ Total chunks created:", splitDocs.length);
-    console.log("📄 First chunk content preview:", splitDocs[0]);
+    const docs = await splitter.createDocuments([text]);
+
+    console.log("PDF text length:", text.length);
+    console.log("First 500 characters:");
+    console.log(text.substring(0, 500));
+
+    console.log("Chunks:", docs.length);
 
     // 🧠 Create embeddings
     const embeddings = new GoogleGenerativeAIEmbeddings({
@@ -92,7 +106,7 @@ export const pdfUpload = async (req, res) => {
     });
 
     // 🧹 Remove empty chunks
-    const cleanDocs = splitDocs.filter(
+    const cleanDocs = docs.filter(
       (doc) => doc.pageContent && doc.pageContent.trim().length > 0
     );
 
